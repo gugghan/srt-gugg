@@ -32,6 +32,7 @@ class Config:
     seat_type: str = "GENERAL_FIRST"
     check_interval_min: float = 8.0
     check_interval_max: float = 15.0
+    max_run_seconds: Optional[float] = None
     telegram_bot_token: Optional[str] = None
     telegram_chat_id: Optional[str] = None
 
@@ -64,6 +65,9 @@ class Config:
             seat_type=os.getenv("SEAT_TYPE", "GENERAL_FIRST").upper(),
             check_interval_min=_get_float("CHECK_INTERVAL_MIN", 8.0),
             check_interval_max=_get_float("CHECK_INTERVAL_MAX", 15.0),
+            max_run_seconds=(
+                float(os.getenv("MAX_RUN_SECONDS")) if os.getenv("MAX_RUN_SECONDS") else None
+            ),
             telegram_bot_token=os.getenv("TELEGRAM_BOT_TOKEN") or None,
             telegram_chat_id=os.getenv("TELEGRAM_CHAT_ID") or None,
         )

@@ -1,5 +1,6 @@
 import argparse
 import logging
+import os
 
 from srt_bot.bot import SRTBot
 from srt_bot.config import Config
@@ -36,7 +37,12 @@ def main() -> None:
         config.time_end = args.time_end
 
     bot = SRTBot(config)
-    bot.run()
+    reserved = bot.run()
+
+    github_output = os.getenv("GITHUB_OUTPUT")
+    if github_output:
+        with open(github_output, "a") as f:
+            f.write(f"reserved={'true' if reserved else 'false'}\n")
 
 
 if __name__ == "__main__":
