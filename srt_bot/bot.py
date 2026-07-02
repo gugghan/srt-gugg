@@ -1,0 +1,114 @@
+import logging
+import random
+import time
+from typing import List, Optional
+
+from SRT import SRT, SRTError, SRTLoginError, SRTNotLoggedInError, SRTResponseError
+from SRT.passenger import Adult, Child, Senior
+
+from .config import Config
+from .notifier import TelegramNotifier
+
+logger = logging.getLogger(__name__)
+
+
+class SRTBot:
+    def __init__(self, config: Config):
+        self.config = config
+        self.notifier = TelegramNotifier(config.telegram_bot_token, config.telegram_chat_id)
+        self.srt: Optional[SRT] = None
+
+    def _passengers(self) -> List:
+        passengers = []
+        passengers += [Adult()] * self.config.adult_count
+        passengers += [Child()] * self.config.child_count
+        passengers += [Senior()] * self.config.senior_count
+        return passengers or [Adult()]
+
+    def _login(self) -> None:
+        logger.info("Logging in to SRT as %s", self.config.srt_id)
+        self.srt = SRT(self.config.srt_id, self.config.srt_password, auto_login=True)
+
+    def _seat_available(self, train) -> bool:
+        seat_type = self.config.seat_type
+        if seat_type == "GENERAL_ONLY":
+            return train.general_seat_available()
+        if seat_type == "SPECIAL_ONLY":
+            return train.special_seat_available()
+        return train.seat_available()
+
+    def _search(self):
+        return self.srt.search_train(
+            dep=self.config.dep_station,
+            arr=self.config.arr_station,
+            date=self.config.date,
+            time=self.config.time_start,
+            time_limit=self.config.time_end,
+            available_only=False,
+        )
+
+    def _try_reserve(self, trains) -> bool:
+        passengers = self._passengers()
+        prefer_special = self.config.seat_type == "SPECIAL_FIRST"
+
+        for train in trains:
+            if not self._seat_available(train):
+                continue
+
+            logger.info(
+                "Seat available on train %s (%s -> %s), attempting reservation",
+                train.train_number,
+                train.dep_time,
+                train.arr_time,
+            )
+            try:
+                special_seat = prefer_special and train.special_seat_available()
+                reservation = self.srt.reserve(
+                    train, passengers=passengers, special_seat=special_seat
+                )
+            except SRTError as exc:
+                logger.warning("Reservation attempt failed for train %s: %s", train.train_number, exc)
+                continue
+
+            message = (
+                "SRT 예매 성공!\n"
+                f"{self.config.dep_station} -> {self.config.arr_station}\n"
+                f"열차 {train.train_number} ({train.dep_time} 출발)\n"
+                f"예약번호: {getattr(reservation, 'reservation_number', 'N/A')}"
+            )
+            logger.info(message)
+            self.notifier.send(message)
+            return True
+
+        return False
+
+    def run(self) -> None:
+        self._login()
+        self.notifier.send(
+            "SRT 자동예매 봇을 시작합니다: "
+            f"{self.config.dep_station} -> {self.config.arr_station}, "
+            f"{self.config.date} {self.config.time_start}~{self.config.time_end}"
+        )
+
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                trains = self._search()
+                if self._try_reserve(trains):
+                    break
+                logger.info("Attempt #%d: no seats available yet", attempt)
+            except SRTNotLoggedInError:
+                logger.warning("Session expired, re-logging in")
+                self._login()
+            except SRTLoginError as exc:
+                logger.error("Login failed: %s", exc)
+                raise
+            except SRTResponseError as exc:
+                logger.warning("Temporary SRT response error: %s", exc)
+            except SRTError as exc:
+                logger.warning("SRT error: %s", exc)
+            except Exception:
+                logger.exception("Unexpected error during reservation attempt")
+
+            time.sleep(random.uniform(self.config.check_interval_min, self.config.check_interval_max))
