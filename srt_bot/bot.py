@@ -82,7 +82,13 @@ class SRTBot:
 
         return False
 
-    def run(self) -> None:
+    def run(self) -> bool:
+        """Search and attempt reservation until success or the time budget runs out.
+
+        Returns True if a reservation was made, False if the (optional)
+        max_run_seconds budget was exhausted first. With no budget configured
+        this blocks forever until a reservation succeeds.
+        """
         self._login()
         self.notifier.send(
             "SRT 자동예매 봇을 시작합니다: "
@@ -90,13 +96,25 @@ class SRTBot:
             f"{self.config.date} {self.config.time_start}~{self.config.time_end}"
         )
 
+        start_time = time.monotonic()
         attempt = 0
         while True:
+            if (
+                self.config.max_run_seconds is not None
+                and time.monotonic() - start_time >= self.config.max_run_seconds
+            ):
+                logger.info(
+                    "Time budget of %.0fs exhausted without a reservation; "
+                    "exiting for the next scheduled run",
+                    self.config.max_run_seconds,
+                )
+                return False
+
             attempt += 1
             try:
                 trains = self._search()
                 if self._try_reserve(trains):
-                    break
+                    return True
                 logger.info("Attempt #%d: no seats available yet", attempt)
             except SRTNotLoggedInError:
                 logger.warning("Session expired, re-logging in")
