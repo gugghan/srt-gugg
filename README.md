@@ -1,7 +1,7 @@
 # srt-gugg
 
 SRT(수서고속철) 승차권을 자동으로 조회하고, 좌석이 열리면 자동으로 예매하는 봇입니다.
-[SRT](https://pypi.org/project/SRT/) 비공식 파이썬 패키지를 사용해 SRT 홈페이지의
+[SRTrain](https://pypi.org/project/SRTrain/) 비공식 파이썬 패키지를 사용해 SRT 홈페이지의
 예매 절차(로그인 → 열차 조회 → 예약)를 자동화합니다.
 
 > ⚠️ 이 봇은 SRT를 공식 지원하지 않는 리버스 엔지니어링 기반 라이브러리를 사용합니다.
