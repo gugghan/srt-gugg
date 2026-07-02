@@ -5,6 +5,7 @@ from typing import List, Optional
 
 from SRT import SRT, SRTError, SRTLoginError, SRTNotLoggedInError, SRTResponseError
 from SRT.passenger import Adult, Child, Senior
+from SRT.seat_type import SeatType
 
 from .config import Config
 from .notifier import TelegramNotifier
@@ -49,7 +50,11 @@ class SRTBot:
 
     def _try_reserve(self, trains) -> bool:
         passengers = self._passengers()
-        prefer_special = self.config.seat_type == "SPECIAL_FIRST"
+        try:
+            seat_type = SeatType[self.config.seat_type]
+        except KeyError:
+            logger.warning("Unknown SEAT_TYPE %r, falling back to GENERAL_FIRST", self.config.seat_type)
+            seat_type = SeatType.GENERAL_FIRST
 
         for train in trains:
             if not self._seat_available(train):
@@ -62,9 +67,8 @@ class SRTBot:
                 train.arr_time,
             )
             try:
-                special_seat = prefer_special and train.special_seat_available()
                 reservation = self.srt.reserve(
-                    train, passengers=passengers, special_seat=special_seat
+                    train, passengers=passengers, special_seat=seat_type
                 )
             except SRTError as exc:
                 logger.warning("Reservation attempt failed for train %s: %s", train.train_number, exc)
